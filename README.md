@@ -9,19 +9,10 @@ Questa repository ospita l'interfaccia di visualizzazione dei dati normativi der
 <!-- - **Dati normativi**: Tabelle normative complete di medie, deviazioni standard e percentili (5° - 95°). -->
 
 
-## 🛠️ Architettura
-La dashboard è un'applicazione statica basata su:
-- **HTML5/CSS3** (Bootstrap 5)
-- **Plotly.js** per la generazione dei grafici
-- **data.js**: Database JSON locale contenente i risultati aggregati del framework di analisi Talkidz.
-
 ## 📁 Struttura Repository
 - `index.html`: Dashboard principale.
 - `data.js`: File contenente i dati elaborati (generato dal motore Python privato).
 - `README.md`: Documentazione.
 
 ## 🔐 Privacy e Sicurezza
-I dati contenuti in questa repository sono esclusivamente **aggregati**. Non sono presenti dati sensibili o identificativi dei soggetti partecipanti alla ricerca. I valori riportati rappresentano medie di popolazione e percentili normativi calcolati tramite il framework `talkidz_main`.
-
----
-*Talkidz Research Framework © 2026*
+I dati contenuti in questa repository sono esclusivamente **aggregati**. Non sono presenti dati sensibili o identificativi dei soggetti partecipanti alla ricerca. I valori riportati rappresentano medie di popolazione e percentili normativi calcolati tramite algoritmi proprietari. Per info e richieste scrivere a [francesco.petriglia@centropaideia.org](mailto:francesco.petriglia@centropaideia.org)
