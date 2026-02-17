@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Talkidz Explorer - Dashboard Dati Normativi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; padding-bottom: 50px; }
+        .metric-card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 25px; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+        .metric-title { font-size: 1.1rem; font-weight: 700; color: #1e293b; margin: 0; text-transform: uppercase; }
+        
+        .badge-sig { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; padding: 5px 10px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; }
+        .badge-ns { background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; padding: 5px 10px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; }
+        
+        .posthoc-box { margin-top: 10px; font-size: 0.85rem; background: #f0f9ff; padding: 10px; border-radius: 6px; border-left: 4px solid #0ea5e9; }
+        
+        .table-custom th { background: #f8fafc; text-transform: uppercase; font-size: 0.75rem; color: #64748b; }
+        .table-custom td { font-size: 0.85rem; vertical-align: middle; }
+        
+        .nav-pills .nav-link.active { background-color: white; color: #2563eb; border: 1px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .nav-pills .nav-link { color: #64748b; font-weight: 600; margin-bottom: 5px; cursor: pointer; }
+        
+        #ana-box { font-size: 0.75rem; }
+        .sticky-top-nav { background: white; border-bottom: 1px solid #e2e8f0; z-index: 1020; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid px-4 py-3 sticky-top-nav sticky-top">
+    <div class="d-flex justify-content-between align-items-center">
+        <h4 class="m-0 fw-bold text-primary">Talkidz Explorer</h4>
+        
+        <div class="d-flex align-items-center">
+            <span class="me-2 small fw-bold text-muted text-uppercase">Vista Globale:</span>
+            <select class="form-select form-select-sm w-auto me-4" onchange="setGlobalPlotType(this.value)">
+                <option value="line">Andamento Lineare (Media ± DS)</option>
+                <option value="box">Boxplot (Distribuzione)</option>
+                <option value="bar">Barre (Media ± DS)</option>
+            </select>
+            
+            <div class="btn-group">
+                <button onclick="setMode('annuale')" id="btn-annuale" class="btn btn-sm btn-outline-primary active">3 Fasce</button>
+                <button onclick="setMode('semestrale')" id="btn-semestrale" class="btn btn-sm btn-outline-primary">6 Fasce</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid px-4 mt-4">
+    <div class="row">
+        <div class="col-md-2">
+            <div id="category-list" class="nav flex-column nav-pills">
+                </div>
+        </div>
+
+        <div class="col-md-10" id="main-content">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Caricamento dati in corso...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="data.js"></script>
+
+<script>
+    let CURRENT_MODE = 'annuale';
+    let currentGlobalPlotType = 'line'; // Default iniziale
+
+    window.onload = () => {
+        if (typeof GLOBAL_DATA !== 'undefined') {
+            renderCategories();
+            renderAnagrafica();
+        } else {
+            document.getElementById('main-content').innerHTML = 
+                `<div class="alert alert-danger">Errore: File data.js non trovato o non valido.</div>`;
+        }
+    };
+
+    function setMode(mode) {
+        CURRENT_MODE = mode;
+        document.getElementById('btn-annuale').classList.toggle('active', mode === 'annuale');
+        document.getElementById('btn-semestrale').classList.toggle('active', mode === 'semestrale');
+        renderCategories();
+        renderAnagrafica();
+    }
+
+    function setGlobalPlotType(type) {
+        currentGlobalPlotType = type;
+        // Aggiorna tutti i selettori individuali e ridisegna
+        const selectors = document.querySelectorAll('.chart-selector');
+        selectors.forEach(select => {
+            select.value = type;
+            const idx = select.getAttribute('data-index');
+            const category = select.getAttribute('data-category');
+            updateIndividualPlot(idx, category, type);
+        });
+    }
+
+    function renderAnagrafica() {
+        const stats = GLOBAL_DATA.descrittive[CURRENT_MODE];
+        const sidebar = document.getElementById('category-list');
+        const oldBox = document.getElementById('ana-box');
+        if (oldBox) oldBox.remove();
+
+        const container = document.createElement('div');
+        container.id = 'ana-box';
+        container.className = 'p-2 mb-4 bg-white rounded border shadow-sm text-center';
+
+        let tableRows = '';
+        let totalM = 0, totalF = 0;
+
+        stats.forEach((item) => {
+            totalM += item.M; totalF += item.F;
+            tableRows += `<tr><td class="fw-bold">${item.fascia}</td><td>${item.M}</td><td>${item.F}</td></tr>`;
+        });
+
+        container.innerHTML = `
+            <div class="p-2 border-bottom bg-light mb-2 fw-bold text-uppercase" style="font-size:0.65rem">👫 Campione</div>
+            <table class="table table-sm table-borderless m-0">
+                <thead><tr><th>Fascia</th><th>M</th><th>F</th></tr></thead>
+                <tbody>${tableRows}</tbody>
+                <tfoot class="border-top"><tr class="fw-bold"><td>TOT</td><td>${totalM}</td><td>${totalF}</td></tr></tfoot>
+            </table>`;
+        sidebar.prepend(container);
+    }
+
+    function renderCategories() {
+        const data = GLOBAL_DATA[CURRENT_MODE];
+        const catList = document.getElementById('category-list');
+        
+        // Pulizia (mantenendo l'anagrafica)
+        const existingLinks = catList.querySelectorAll('.nav-link');
+        existingLinks.forEach(l => l.remove());
+
+        // 1. Genera link per le Aree Standard (Grafici)
+        Object.keys(data).forEach((cat) => {
+            if (cat === "descrittive" || cat === "info_campione") return;
+            
+            const btn = document.createElement('button');
+            btn.className = `nav-link text-start`;
+            btn.innerText = cat;
+            btn.onclick = () => {
+                catList.querySelectorAll('.nav-link').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderMetrics(cat);
+            };
+            catList.appendChild(btn);
+        });
+
+        // 2. Aggiunge il REPORT NORMATIVO come ULTIMA scelta
+        const reportBtn = document.createElement('button');
+        reportBtn.className = `nav-link text-start mt-3 fw-bold border-top pt-3`;
+        reportBtn.innerHTML = `📋 REPORT COMPLETO`;
+        reportBtn.onclick = () => {
+            catList.querySelectorAll('.nav-link').forEach(b => b.classList.remove('active'));
+            reportBtn.classList.add('active');
+            renderFullNormativeReport();
+        };
+        catList.appendChild(reportBtn);
+
+        // Default: clicca sulla prima categoria
+        const firstCat = catList.querySelector('.nav-link');
+        if (firstCat) firstCat.click();
+    }
+
+    function renderFullNormativeReport() {
+        const data = GLOBAL_DATA[CURRENT_MODE];
+        const container = document.getElementById('main-content');
+        
+        // Titolo e info
+        container.innerHTML = `
+            <div class="mb-5 border-bottom pb-3">
+                <h2 class="fw-bold text-dark">Report Dati Normativi</h2>
+                <span class="badge bg-secondary text-uppercase">Suddivisione: ${CURRENT_MODE}</span>
+            </div>
+        `;
+
+        // Cicla su ogni area definita nel JSON
+        Object.keys(data).forEach(category => {
+            const section = document.createElement('div');
+            section.className = 'mb-5 pb-4';
+            
+            let areaHtml = `<h4 class="fw-bold mb-4 text-dark border-start border-4 border-secondary ps-3">${category.toUpperCase()}</h4>`;
+            
+            data[category].forEach(item => {
+                let tableRows = item.table.map(row => `
+                    <tr>
+                        <td class="text-start ps-3 fw-bold bg-light" style="width:150px;">F${row.ID}</td>
+                        <td>${row.N}</td>
+                        <td class="fw-bold">${row.Media.toFixed(2)}</td>
+                        <td>${row.DS.toFixed(2)}</td>
+                        <td class="bg-light">${row.P5.toFixed(2)}</td>
+                        <td>${row.P10.toFixed(2)}</td>
+                        <td>${row.P25.toFixed(2)}</td>
+                        <td class="fw-bold border-start border-end">${row.P50.toFixed(2)}</td>
+                        <td>${row.P75.toFixed(2)}</td>
+                        <td>${row.P90.toFixed(2)}</td>
+                        <td class="bg-light">${row.P95.toFixed(2)}</td>
+                    </tr>`).join('');
+
+                areaHtml += `
+                    <div class="mb-5">
+                        <h6 class="fw-bold text-muted mb-2 small">${item.name}</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered text-center align-middle" style="font-size:0.75rem; border: 1px solid #dee2e6;">
+                                <thead class="bg-dark text-white">
+                                    <tr style="background: #343a40; color: white;">
+                                        <th rowspan="2" class="align-middle">FASCIA</th>
+                                        <th rowspan="2" class="align-middle">N</th>
+                                        <th rowspan="2" class="align-middle">MEDIA</th>
+                                        <th rowspan="2" class="align-middle">DS</th>
+                                        <th colspan="7">PERCENTILI</th>
+                                    </tr>
+                                    <tr style="background: #6c757d; color: white;">
+                                        <th>5°</th><th>10°</th><th>25°</th><th>50° (Mediana)</th><th>75°</th><th>90°</th><th>95°</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${tableRows}</tbody>
+                            </table>
+                        </div>
+                    </div>`;
+            });
+            
+            section.innerHTML = areaHtml;
+            container.appendChild(section);
+        });
+    }
+
+    function renderMetrics(category) {
+        const metrics = GLOBAL_DATA[CURRENT_MODE][category];
+        const container = document.getElementById('main-content');
+        container.innerHTML = '';
+
+        const colors = CURRENT_MODE === 'annuale' 
+            ? ["#10b981", "#3b82f6", "#ef4444"] 
+            : ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"];
+
+        metrics.forEach((item, idx) => {
+            const card = document.createElement('div');
+            card.className = 'metric-card';
+            
+            let postHocHtml = item.posthoc.length > 0 
+                ? `<div class="posthoc-box"><strong>Differenze Significative:</strong><br>${item.posthoc.join('<br>')}</div>` 
+                : '';
+
+            let anovaHtml = item.anova.sig 
+                ? `<span class="badge-sig">ANOVA: ${item.anova.text}</span>` 
+                : `<span class="badge-ns">ANOVA: ${item.anova.text}</span>`;
+
+            let rows = item.table.map(row => `
+                <tr>
+                    <td style="white-space:nowrap"><strong>${row.Fascia}</strong></td>
+                    <td class="text-end">${row.N}</td>
+                    <td class="text-end text-primary fw-bold">${row.Media.toFixed(2)}</td>
+                    <td class="text-end text-muted">${row.DS.toFixed(2)}</td>
+                </tr>`).join('');
+
+            card.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
+                    <div><h5 class="metric-title">${item.name}</h5>${postHocHtml}</div>
+                    <div class="text-end">
+                        ${anovaHtml}
+                        <div class="mt-2">
+                            <select class="form-select form-select-sm chart-selector" 
+                                    data-index="${idx}" data-category="${category}"
+                                    onchange="updateIndividualPlot(${idx}, '${category}', this.value)">
+                                <option value="line" ${currentGlobalPlotType === 'line' ? 'selected' : ''}>Andamento Lineare</option>
+                                <option value="box" ${currentGlobalPlotType === 'box' ? 'selected' : ''}>Boxplot</option>
+                                <option value="bar" ${currentGlobalPlotType === 'bar' ? 'selected' : ''}>Barre</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-lg-8"><div id="plot-${idx}" style="height:350px;"></div></div>
+                    <div class="col-lg-4">
+                        <table class="table table-custom table-hover">
+                            <thead><tr><th>Fascia</th><th class="text-end">N</th><th class="text-end">Media</th><th class="text-end">DS</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+            container.appendChild(card);
+            renderPlotLogic(currentGlobalPlotType, idx, item, colors);
+        });
+    }
+
+    function updateIndividualPlot(idx, category, type) {
+        const item = GLOBAL_DATA[CURRENT_MODE][category][idx];
+        const colors = CURRENT_MODE === 'annuale' 
+            ? ["#10b981", "#3b82f6", "#ef4444"] 
+            : ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"];
+        renderPlotLogic(type, idx, item, colors);
+    }
+
+    function renderPlotLogic(type, idx, item, colors) {
+        let traces = [];
+
+        if (type === 'line') {
+            // LINE CHART con errore DS
+            traces.push({
+                x: item.table.map(row => "F" + row.ID),
+                y: item.table.map(row => row.Media),
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: { color: '#3b82f6', width: 3, shape: 'spline' },
+                marker: { size: 8, color: '#1e40af' },
+                error_y: {
+                    type: 'data',
+                    array: item.table.map(row => row.DS),
+                    visible: true,
+                    color: 'rgba(59, 130, 246, 0.3)',
+                    thickness: 8
+                },
+                hovertemplate: 'Media: %{y:.2f}<br>DS: ±%{error_y.array:.2f}<extra></extra>'
+            });
+        } else if (type === 'box') {
+            // BOXPLOT completo
+            item.chart_data.forEach((grp, i) => {
+                traces.push({
+                    y: grp.values,
+                    type: 'box',
+                    name: "F" + grp.group,
+                    boxpoints: 'all',
+                    jitter: 0.3,
+                    marker: { color: colors[i % colors.length], size: 4, opacity: 0.5 },
+                    hoveron: 'boxes',
+                    hovertemplate: 'Valore: %{y:.2f}<extra></extra>'
+                });
+            });
+        } else if (type === 'bar') {
+            // BAR CHART
+            traces.push({
+                x: item.table.map(row => "F" + row.ID),
+                y: item.table.map(row => row.Media),
+                type: 'bar',
+                marker: { color: colors.slice(0, item.table.length), opacity: 0.7 },
+                error_y: {
+                    type: 'data',
+                    array: item.table.map(row => row.DS),
+                    visible: true,
+                    color: '#1e293b'
+                }
+            });
+        }
+
+        const layout = {
+            showlegend: false,
+            margin: {l:40, r:10, t:10, b:40},
+            plot_bgcolor: '#ffffff',
+            yaxis: { 
+                gridcolor: '#f1f5f9', 
+                zeroline: false,
+                title: { text: type !== 'box' ? 'Media ± DS' : '', font: {size: 10} }
+            },
+            xaxis: { 
+                tickfont: {color:'#1e293b'},
+                title: { text: 'Fascia Evolutiva', font: {size: 10} }
+            }
+        };
+
+        Plotly.newPlot(`plot-${idx}`, traces, layout, {displayModeBar: false});
+    }
+</script>
+
+</body>
+</html>
